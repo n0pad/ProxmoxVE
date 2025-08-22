@@ -28,7 +28,7 @@ function update_script() {
     exit
   fi
 
-  RELEASE=$(curl -fsSL https://api.github.com/repos/threadfin/threadfin/releases/latest | grep "tag_name" | awk '{print substr($2, 2, length($2)-3) }')
+  RELEASE=$(curl -fsSL https://api.github.com/repos/n0pad/threadfin/releases/latest | grep "tag_name" | awk '{print substr($2, 2, length($2)-3) }')
   if [[ "${RELEASE}" != "$(cat ~/.threadfin_version 2>/dev/null)" ]] || [[ ! -f ~/.threadfin_version ]]; then
 
     msg_info "Stopping $APP"
