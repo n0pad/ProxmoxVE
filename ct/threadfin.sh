@@ -14,6 +14,10 @@ var_os="${var_os:-debian}"
 var_version="${var_version:-12}"
 var_unprivileged="${var_unprivileged:-1}"
 
+# --- NEW: choose a single repo and use it everywhere ---
+# If you're using your fork, leave n0pad/Threadfin. Otherwise set to Threadfin/Threadfin.
+REPO="${REPO:-n0pad/Threadfin}"
+
 header_info "$APP"
 variables
 color
@@ -28,20 +32,44 @@ function update_script() {
     exit
   fi
 
-  RELEASE=$(curl -fsSL https://api.github.com/repos/n0pad/threadfin/releases/latest | grep "tag_name" | awk '{print substr($2, 2, length($2)-3) }')
-  if [[ "${RELEASE}" != "$(cat ~/.threadfin_version 2>/dev/null)" ]] || [[ ! -f ~/.threadfin_version ]]; then
+  # --- NEW: make sure version file is a FILE, not a directory ---
+  # Some environments created ~/.threadfin as a directory; move it out of the way.
+  if [[ -d "$HOME/.threadfin" ]]; then
+    msg_info "Found directory $HOME/.threadfin; renaming to $HOME/.threadfin.bak"
+    mv -f "$HOME/.threadfin" "$HOME/.threadfin.bak"
+  fi
+  # Force the helper to use a sane file path for version tracking (if respected by build.func)
+  version_file="${HOME}/.threadfin_version"
 
+  # --- NEW: read latest tag from the SAME repo we will fetch from ---
+  RELEASE="$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" \
+    | grep -m1 '"tag_name"' | awk -F'"' '{print $4}')"
+
+  if [[ -z "$RELEASE" ]]; then
+    msg_error "Could not determine latest release tag from ${REPO}."
+    exit 1
+  fi
+
+  # Compare to current local version (if any)
+  CURRENT_VER="$(cat "$HOME/.threadfin_version" 2>/dev/null || true)"
+
+  if [[ "$RELEASE" != "$CURRENT_VER" ]] || [[ ! -f "$HOME/.threadfin_version" ]]; then
     msg_info "Stopping $APP"
-    systemctl stop threadfin
+    systemctl stop threadfin || true
     msg_ok "Stopped $APP"
 
-    fetch_and_deploy_gh_release "threadfin" "threadfin/threadfin" "singlefile" "latest" "/opt/threadfin" "Threadfin_linux_amd64"
+    # --- FIX: fetch from the SAME repo; asset name kept as before ---
+    fetch_and_deploy_gh_release "threadfin" "${REPO}" "singlefile" "latest" \
+      "/opt/threadfin" "Threadfin_linux_amd64"
+
+    # Write version to the file (also covers cases where helper doesn't)
+    echo "$RELEASE" > "$HOME/.threadfin_version"
 
     msg_info "Starting $APP"
     systemctl start threadfin
     msg_ok "Started $APP"
 
-    msg_ok "Updated Successfully"
+    msg_ok "Updated Successfully to v${RELEASE}"
   else
     msg_ok "No update required. ${APP} is already at v${RELEASE}"
   fi
