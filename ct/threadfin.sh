@@ -53,14 +53,14 @@ get_latest_tag() {
 # ----------------------------
 
 function ensure_version_file() {
-  # We standardize on ~/.threadfin as the version FILE.
+  # Standardize on ~/.threadfin as the version FILE
   local vf="$HOME/.threadfin"
 
-  # If ~/.threadfin is a directory, back it up and replace with a file.
   if [[ -d "$vf" ]]; then
-    msg_info "Found directory $vf; backing up and replacing with version file"
+    msg_info "Found directory $vf; backing up and restoring file"
     mv -f "$vf" "$vf.dir.$(ts).bak"
-    # If a previous file backup exists, restore it; else create fresh
+
+    # If a previous backup file exists, restore it as ~/.threadfin
     if [[ -f "$vf.bak" ]]; then
       mv -f "$vf.bak" "$vf"
     else
@@ -68,14 +68,15 @@ function ensure_version_file() {
     fi
   fi
 
-  # If a legacy ~/.threadfin_version exists, preserve it as ~/.threadfin.bak
-  if [[ -f "$HOME/.threadfin_version" && ! -f "$vf.bak" ]]; then
-    mv -f "$HOME/.threadfin_version" "$vf.bak"
+  # If legacy ~/.threadfin_version exists and ~/.threadfin is empty, migrate it
+  if [[ -f "$HOME/.threadfin_version" && ! -s "$vf" ]]; then
+    mv -f "$HOME/.threadfin_version" "$vf"
   fi
 
-  # Ensure we end up with a file at ~/.threadfin
+  # Ensure we end up with a real file at ~/.threadfin
   [[ -f "$vf" ]] || : > "$vf"
 }
+
 
 function update_script() {
   header_info
