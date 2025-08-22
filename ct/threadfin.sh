@@ -4,7 +4,7 @@
 # - Avoids curl|grep pipes to prevent curl (23) under pipefail
 # - Ensures version tracking uses a file (~/.threadfin_version), not a directory
 
-source <(curl -fsSL https://raw.githubusercontent.com/community-scripts/ProxmoxVE/main/misc/build.func)
+source <(curl -fsSL https://raw.githubusercontent.com/n0pad/ProxmoxVE/main/misc/build.func)
 # Copyright (c) 2021-2025 tteck
 # Author: tteck (tteckster)
 # License: MIT | https://github.com/community-scripts/ProxmoxVE/raw/main/LICENSE
