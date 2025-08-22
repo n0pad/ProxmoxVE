@@ -14,8 +14,7 @@ var_os="${var_os:-debian}"
 var_version="${var_version:-12}"
 var_unprivileged="${var_unprivileged:-1}"
 
-# --- NEW: choose a single repo and use it everywhere ---
-# If you're using your fork, leave n0pad/Threadfin. Otherwise set to Threadfin/Threadfin.
+# Use ONE repo everywhere (change to Threadfin/Threadfin if you want upstream)
 REPO="${REPO:-n0pad/Threadfin}"
 
 header_info "$APP"
@@ -23,47 +22,71 @@ variables
 color
 catch_errors
 
+# -------- helpers --------
+ts() { date +%Y%m%d-%H%M%S; }
+
+get_latest_tag() {
+  # 1) Try GitHub API
+  local api_json tag
+  api_json="$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" 2>/dev/null || true)"
+  if [[ -n "$api_json" ]]; then
+    # extract "tag_name": "v1.2.3"
+    tag="$(printf '%s' "$api_json" | grep -oP '"tag_name"\s*:\s*"\K[^"]+' | head -n1)"
+    if [[ -n "$tag" ]]; then
+      printf '%s' "$tag"
+      return 0
+    fi
+  fi
+  # 2) Fallback: follow releases/latest redirect and read final URL (/tag/<TAG>)
+  local final url
+  final="$(curl -fsSLI -o /dev/null -w '%{url_effective}' "https://github.com/${REPO}/releases/latest" 2>/dev/null || true)"
+  # examples: https://github.com/${REPO}/releases/tag/v1.2.3
+  url="${final##*/tag/}"
+  if [[ -n "$url" && "$url" != "$final" ]]; then
+    printf '%s' "$url"
+    return 0
+  fi
+  return 1
+}
+
+# -------------------------
+
 function update_script() {
   header_info
   check_container_storage
   check_container_resources
   if [[ ! -d /opt/threadfin ]]; then
     msg_error "No ${APP} Installation Found!"
-    exit
+    exit 1
   fi
 
-  # --- NEW: make sure version file is a FILE, not a directory ---
-  # Some environments created ~/.threadfin as a directory; move it out of the way.
+  # Ensure the version path is a file (not a directory)
   if [[ -d "$HOME/.threadfin" ]]; then
-    msg_info "Found directory $HOME/.threadfin; renaming to $HOME/.threadfin.bak"
-    mv -f "$HOME/.threadfin" "$HOME/.threadfin.bak"
+    msg_info "Found directory $HOME/.threadfin; renaming to $HOME/.threadfin.$(ts).bak"
+    mv -f "$HOME/.threadfin" "$HOME/.threadfin.$(ts).bak"
   fi
-  # Force the helper to use a sane file path for version tracking (if respected by build.func)
   version_file="${HOME}/.threadfin_version"
 
-  # --- NEW: read latest tag from the SAME repo we will fetch from ---
-  RELEASE="$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" \
-    | grep -m1 '"tag_name"' | awk -F'"' '{print $4}')"
-
+  # Robust tag fetch (no broken pipe)
+  RELEASE="$(get_latest_tag)" || RELEASE=""
   if [[ -z "$RELEASE" ]]; then
     msg_error "Could not determine latest release tag from ${REPO}."
     exit 1
   fi
 
-  # Compare to current local version (if any)
-  CURRENT_VER="$(cat "$HOME/.threadfin_version" 2>/dev/null || true)"
+  CURRENT_VER="$(cat "$version_file" 2>/dev/null || true)"
 
-  if [[ "$RELEASE" != "$CURRENT_VER" ]] || [[ ! -f "$HOME/.threadfin_version" ]]; then
+  if [[ "$RELEASE" != "$CURRENT_VER" ]] || [[ ! -f "$version_file" ]]; then
     msg_info "Stopping $APP"
     systemctl stop threadfin || true
     msg_ok "Stopped $APP"
 
-    # --- FIX: fetch from the SAME repo; asset name kept as before ---
+    # Fetch from the SAME repo; asset name as used before
     fetch_and_deploy_gh_release "threadfin" "${REPO}" "singlefile" "latest" \
       "/opt/threadfin" "Threadfin_linux_amd64"
 
-    # Write version to the file (also covers cases where helper doesn't)
-    echo "$RELEASE" > "$HOME/.threadfin_version"
+    # Persist the version (covers helpers that don’t)
+    printf '%s\n' "$RELEASE" > "$version_file"
 
     msg_info "Starting $APP"
     systemctl start threadfin
